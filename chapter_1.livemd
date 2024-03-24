@@ -1,3 +1,5 @@
+<!-- livebook:{"persist_outputs":true} -->
+
 # Chapter 1
 
 ```elixir
@@ -16,8 +18,10 @@ require Explorer.DataFrame, as: DF
 
 # after executing this command, Explorer will download the built-in dataset for this project
 # it is a dataframe with 150 rows (examples), and 5 columns (features). The values in each 
-# column are considered a Series - it only make sense to run aggregate functions (e.g. avg, sum)
+# column are considered a Series - Usually it only make sense to run aggregate functions (e.g. avg, sum)
 # against the series, not the whole dataset.
+#
+# The `species` column is a "categorical feature"
 #
 # Example output:
 # #Explorer.DataFrame<
@@ -29,4 +33,332 @@ require Explorer.DataFrame, as: DF
 #  species string ["Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", ...]
 # >
 iris = Explorer.Datasets.iris()
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Explorer.DataFrame<
+  Polars[150 x 5]
+  sepal_length f64 [5.1, 4.9, 4.7, 4.6, 5.0, ...]
+  sepal_width f64 [3.5, 3.0, 3.2, 3.1, 3.6, ...]
+  petal_length f64 [1.4, 1.4, 1.3, 1.5, 1.4, ...]
+  petal_width f64 [0.2, 0.2, 0.2, 0.2, 0.2, ...]
+  species string ["Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", ...]
+>
+```
+
+```elixir
+# normalize the data using standardization
+# `species` does not need to be normalized because it is a categorical feature
+cols = ~w(sepal_length sepal_width petal_length petal_width)
+
+# To standardize a series, calculate the mean and variance of the seriesy.
+# Then reduce each value in the series by the mean and divide by the variance.
+# The output of this expects a tuple with {column_name, values} (which is technically
+# a keyword list) and will return a new DataFrame with the new normalized column values.
+#
+# Note:
+# There's a lot of macro magic going on here 🧐 - it's nice because it saves time, 
+# but also a bit too mysterious.
+# also `mutate` seems like a bit of a misnomer.. it doesn't actually affect the original
+# dataframe. It's more like an update.
+normalized_iris =
+  DF.mutate(
+    iris,
+    for col <- across(^cols) do
+      {col.name, (col - mean(col)) / variance(col)}
+    end
+  )
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Explorer.DataFrame<
+  Polars[150 x 5]
+  sepal_length f64 [-1.0840606189132322, -1.3757361217598405, -1.66741162460645,
+   -1.8132493760297554, -1.2298983703365365, ...]
+  sepal_width f64 [2.3722896125315045, -0.28722789030650403, 0.7765791108287005, 0.2446756102610982,
+   2.9041931130991068, ...]
+  petal_length f64 [-0.757639168744384, -0.757639168744384, -0.789760671093637, -0.7255176663951308,
+   -0.757639168744384, ...]
+  petal_width f64 [-1.714701435665471, -1.714701435665471, -1.714701435665471, -1.714701435665471,
+   -1.714701435665471, ...]
+  species string ["Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", ...]
+>
+```
+
+```elixir
+# convert the `species` into a categorical feature, by telling Explorer to cast that series
+# to a category.
+#
+# Note: after running this, in the output next to the column, istead of `string` it will 
+# now show `category`
+normalized_iris =
+  DF.mutate(
+    normalized_iris,
+    species: Explorer.Series.cast(species, :category)
+  )
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Explorer.DataFrame<
+  Polars[150 x 5]
+  sepal_length f64 [-1.0840606189132322, -1.3757361217598405, -1.66741162460645,
+   -1.8132493760297554, -1.2298983703365365, ...]
+  sepal_width f64 [2.3722896125315045, -0.28722789030650403, 0.7765791108287005, 0.2446756102610982,
+   2.9041931130991068, ...]
+  petal_length f64 [-0.757639168744384, -0.757639168744384, -0.789760671093637, -0.7255176663951308,
+   -0.757639168744384, ...]
+  petal_width f64 [-1.714701435665471, -1.714701435665471, -1.714701435665471, -1.714701435665471,
+   -1.714701435665471, ...]
+  species category ["Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", "Iris-setosa", ...]
+>
+```
+
+```elixir
+# because the data is ordered, and that does not match what would happen in a production system
+# let's shuffle the DataFrame. Also this allows us to split the dataset into a training set and 
+# testing set
+
+# Note: this appears to have the same ordering as the book, suggesting that shuffle may be using
+# a pre-determined seed 🤔
+
+shuffled_normal_iris = DF.shuffle(normalized_iris)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Explorer.DataFrame<
+  Polars[150 x 5]
+  sepal_length f64 [-1.0840606189132322, -0.5007096132200132, -0.35487186179670904,
+   -1.2298983703365365, -0.0631963589500995, ...]
+  sepal_width f64 [3.436096613666709, -2.946745393144513, -0.28722789030650403, 0.7765791108287005,
+   -1.8829383920093083, ...]
+  petal_length f64 [-0.7255176663951308, 0.07751989233619774, 0.23812740408246344,
+   -0.8218821734428903, 0.4308564181779822, ...]
+  petal_width f64 [-1.3713032843305968, 0.17398839667633606, 0.51738654801121, -1.714701435665471,
+   1.2041828506809578, ...]
+  species category ["Iris-setosa", "Iris-versicolor", "Iris-versicolor", "Iris-setosa",
+   "Iris-virginica", ...]
+>
+```
+
+```elixir
+# split the dataset into a training set and testing set
+# the model should never see the testing set during training, so that we can use it later
+# for validation
+
+train_set = DF.slice(shuffled_normal_iris, 0..119)
+test_set = DF.slice(shuffled_normal_iris, 120..149)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Explorer.DataFrame<
+  Polars[30 x 5]
+  sepal_length f64 [0.6659923981664237, -2.1049248788763637, 0.3743168953198142,
+   -0.6465473646433173, 1.395181155282947, ...]
+  sepal_width f64 [1.3084826113963002, -0.28722789030650403, -2.4148418925769106,
+   -0.28722789030650403, 0.7765791108287005, ...]
+  petal_length f64 [0.30237040878096977, -0.789760671093637, 0.5914639299242479,
+   0.23812740408246344, 0.6878284369720076, ...]
+  petal_width f64 [0.6890856236786471, -1.714701435665471, 0.3456874723437728, 0.51738654801121,
+   1.8909791533507057, ...]
+  species category ["Iris-versicolor", "Iris-setosa", "Iris-virginica", "Iris-versicolor",
+   "Iris-virginica", ...]
+>
+```
+
+```elixir
+# convert the train and test data into a one-hot encoded tensors
+feature_cols = ~w(sepal_length sepal_width petal_length petal_width)
+
+# Note: x is a naming convention for features in ML
+
+# Q? what is the "axis: -1" part?
+# Q? how does train_set take a list as an index?? macro magic?
+# stack the rows of the dataframe into individual entries
+# this converts it into a tensor
+x_train = Nx.stack(train_set[feature_cols], axis: -1)
+
+# Q? what is Nx.iota? the book calls it magic 🤪, promises it will become clear later in chapter 2
+# this converts the species category into a one-hot encoding
+y_train =
+  train_set["species"]
+  |> Nx.stack(axis: -1)
+  |> Nx.equal(Nx.iota({1, 3}, axis: -1))
+
+# do the same for the test set
+x_test = Nx.stack(test_set[feature_cols], axis: -1)
+
+y_test =
+  test_set["species"]
+  |> Nx.stack(axis: -1)
+  |> Nx.equal(Nx.iota({1, 3}, axis: -1))
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Nx.Tensor<
+  u8[30][3]
+  [
+    [0, 1, 0],
+    [1, 0, 0],
+    [0, 0, 1],
+    [0, 1, 0],
+    [0, 0, 1],
+    [0, 0, 1],
+    [0, 1, 0],
+    [0, 0, 1],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 0],
+    [0, 0, 1],
+    [0, 0, 1],
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 0, ...],
+    ...
+  ]
+>
+```
+
+```elixir
+# Now it's time to create and train the model
+# There are three steps:
+# 1. Define the model (function)
+# 2. Create an input pipeline
+# 3. Declare and run the training loop
+
+# declare the model
+# Q? - what the heck did I just type?
+# A:
+# - the shape represents the values of each dimension in the data (aka feature cols)
+# - 3 - the model transforms the data into three probablities - representing the probability
+#   that each example belongs to one of the three categories/classes
+model =
+  Axon.input("iris_features", shape: {nil, 4})
+  |> Axon.dense(3, activation: :softmax)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Axon<
+  inputs: %{"iris_features" => {nil, 4}}
+  outputs: "softmax_0"
+  nodes: 3
+>
+```
+
+```elixir
+# visualize the model
+Axon.Display.as_graph(model, Nx.template({1, 4}, :f32))
+```
+
+<!-- livebook:{"output":true} -->
+
+```mermaid
+graph TD;
+11[/"iris_features (:input) {1, 4}"/];
+12["dense_0 (:dense) {1, 3}"];
+13["softmax_0 (:softmax) {1, 3}"];
+12 --> 13;
+11 --> 12;
+```
+
+```elixir
+# repeatedly return tuples of the training features and targets respectively
+data_stream =
+  Stream.repeatedly(fn ->
+    {x_train, y_train}
+  end)
+
+# the training loop
+# 1. Grab inputs from the input pipeline
+# 2. Make predictions from inputs
+# 3. Determine how good the predictions were
+# 4. Update the model based on prediction goodness
+# 5. Repeat
+trained_model_state =
+  model
+  #  :categorical_cross_entropy loss function optimized with :sgd or stochastic-gradient descent.
+  |> Axon.Loop.trainer(:categorical_cross_entropy, :sgd)
+  |> Axon.Loop.metric(:accuracy)
+  # run 10 times, pulling 500 frames from the input pipeline
+  |> Axon.Loop.run(data_stream, %{}, iterations: 500, epochs: 10)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+Epoch: 0, Batch: 450, accuracy: 0.7968763 loss: 0.5902795
+Epoch: 1, Batch: 450, accuracy: 0.8941582 loss: 0.4508126
+Epoch: 2, Batch: 450, accuracy: 0.9112324 loss: 0.3911307
+Epoch: 3, Batch: 450, accuracy: 0.9343926 loss: 0.3537356
+Epoch: 4, Batch: 450, accuracy: 0.9500036 loss: 0.3266915
+Epoch: 5, Batch: 450, accuracy: 0.9520910 loss: 0.3056644
+Epoch: 6, Batch: 450, accuracy: 0.9662061 loss: 0.2885906
+Epoch: 7, Batch: 450, accuracy: 0.9666680 loss: 0.2743185
+Epoch: 8, Batch: 450, accuracy: 0.9666680 loss: 0.2621354
+Epoch: 9, Batch: 450, accuracy: 0.9666680 loss: 0.2515674
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+%{
+  "dense_0" => %{
+    "bias" => #Nx.Tensor<
+      f32[3]
+      [-0.3742098808288574, 1.565757393836975, -1.1915479898452759]
+    >,
+    "kernel" => #Nx.Tensor<
+      f32[4][3]
+      [
+        [-1.5678695440292358, 0.06459227949380875, 0.09706378728151321],
+        [0.6141299605369568, -0.31658944487571716, -0.3988388180732727],
+        [-1.115641713142395, -0.18924559652805328, 1.2483466863632202],
+        [-2.483003854751587, -1.1043994426727295, 1.8491599559783936]
+      ]
+    >
+  }
+}
+```
+
+```elixir
+# evaluate the trained model
+data = [{x_test, y_test}]
+
+model
+|> Axon.Loop.evaluator()
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(data, trained_model_state)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+Batch: 0, accuracy: 0.9333333
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+%{
+  0 => %{
+    "accuracy" => #Nx.Tensor<
+      f32
+      0.9333333373069763
+    >
+  }
+}
 ```
