@@ -1,0 +1,195 @@
+<!-- livebook:{"persist_outputs":true} -->
+
+# Chapter 2
+
+```elixir
+Mix.install([:nx, :exla, :benchee])
+```
+
+## Understanding Nx Tensors
+
+The easiest way to create a tensor
+
+```elixir
+Nx.tensor([1, 2, 3])
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Nx.Tensor<
+  s64[3]
+  [1, 2, 3]
+>
+```
+
+Tensors can be created from:
+
+* a number
+* a list of numbers
+* or a nested list of numbers
+
+```elixir
+a = Nx.tensor([[1, 2, 3], [4, 5, 6]])
+b = Nx.tensor(1.0)
+c = Nx.tensor([[[[[[1.0, 2]]]]]])
+dbg(a)
+dbg(b)
+dbg(c)
+nil
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[dev/learning/machine_learning_elixir/chapter_2.livemd#cell:gxp6bqy2avz2odxc:5: (file)]
+a #=> #Nx.Tensor<
+  s64[2][3]
+  [
+    [1, 2, 3],
+    [4, 5, 6]
+  ]
+>
+
+[dev/learning/machine_learning_elixir/chapter_2.livemd#cell:gxp6bqy2avz2odxc:6: (file)]
+b #=> #Nx.Tensor<
+  f32
+  1.0
+>
+
+[dev/learning/machine_learning_elixir/chapter_2.livemd#cell:gxp6bqy2avz2odxc:7: (file)]
+c #=> #Nx.Tensor<
+  f32[1][1][1][1][1][2]
+  [
+    [
+      [
+        [
+          [
+            [1.0, 2.0]
+          ]
+        ]
+      ]
+    ]
+  ]
+>
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+nil
+```
+
+Tensors have a numeric type, e.g. s64, f32.
+
+The type is defined by the class (e.g. f) and bit width `{class, bit-width}`
+
+| Class            | Widths        | Elixir Representation                 | String Representation |
+| ---------------- | ------------- | ------------------------------------- | --------------------- |
+| signed integer   | 8, 16, 32, 64 | {:s, 8}, {:s, 16}, {:s, 32}, {:s, 64} | s8, s16, s32, s64     |
+| unsigned integer | 8, 16, 32, 64 | {:u, 8}, {:u, 16}, {:u, 32}, {:u, 64} | u8, u16, u32, u64     |
+| float            | 16, 32, 64    | {:f, 16}, {:f, 32}, {:f, 64}          | f16, f32, f64         |
+| brain float      | 16            | {:bf, 16}                             | bf16                  |
+| complex          | 64, 128       | {:c, 64}, {:c, 128}                   | c64, c128             |
+
+```elixir
+# | Class            | Widths        | Elixir Representation                     | String Representation |
+# | ---------------- | ------------- | ----------------------------------------- | --------------------- |
+# | signed integer   | 8, 16, 32, 64 | {:s, 8}, {:s, 16}, {:s, 32}, {:s, 64}     | s8, s16, s32, s64     |
+# | unsigned integer | 8, 16, 32, 64 | {:u, 8}, {:u, 16}, {:u, 32}, {:u, 64}     | u8, u16, u32, u64 |
+# | float            | 16, 32, 64    | {:f, 16}, {:f, 32}, {:f, 64}              | f16, f32, f64         |
+# | brain float      | 16            | {:bf, 16}                                 | bf16                  |
+# | complex          | 64, 128       | {:c, 64}, {:c, 128}                       | c64, c128             |
+
+a = Nx.tensor([1, 2, 3])
+b = Nx.tensor([1.0, 2.0, 3.0])
+dbg(a)
+dbg(b)
+nil
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[dev/learning/machine_learning_elixir/chapter_2.livemd#cell:j7d7ewru72vczxgd:15: (file)]
+a #=> #Nx.Tensor<
+  s64[3]
+  [1, 2, 3]
+>
+
+[dev/learning/machine_learning_elixir/chapter_2.livemd#cell:j7d7ewru72vczxgd:16: (file)]
+b #=> #Nx.Tensor<
+  f32[3]
+  [1.0, 2.0, 3.0]
+>
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+nil
+```
+
+Adjusting the type
+
+```elixir
+# need more percision. This value will be truncated.
+Nx.tensor(0.0000000000000000000000000000000000000000000001)
+
+# specify the type to increase percision
+Nx.tensor(0.0000000000000000000000000000000000000000000001, type: {:f, 64})
+
+# or use the e notation (cause who can count all those damn zeros!)
+Nx.tensor(1.0e-46, type: {:f, 64})
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Nx.Tensor<
+  f64
+  1.0e-46
+>
+```
+
+What happens when a value goes outside the bit-width of the type
+
+```elixir
+# going outside the range will squeeze the value to some value supported within the range
+# => Nx.Tensor<s8, -128>
+Nx.tensor(128, type: {:s, 8})
+# => Nx.Tensor<s8, -127>
+Nx.tensor(129, type: {:s, 8})
+
+# fix it by using a type with more percision
+# => Nx.Tensor<s16, 128>
+Nx.tensor(128, type: {:s, 16})
+# => Nx.Tensor<s16, 129>
+Nx.tensor(129, type: {:s, 16})
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Nx.Tensor<
+  s16
+  129
+>
+```
+
+tensors have a homogenous type, in this case 1.0 has the highest percision so the rest of the values are casted to that type
+
+```elixir
+Nx.tensor([1.0, 2, 3])
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+#Nx.Tensor<
+  f32[3]
+  [1.0, 2.0, 3.0]
+>
+```
